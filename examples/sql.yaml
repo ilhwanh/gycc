@@ -1,0 +1,374 @@
+lex:
+  - name: comment
+    elements:
+      - name: multiline
+        regex: "/\\*(.|\n)*?\\*/"
+      - name: singleline
+        regex: "--.*$"
+  - name: literal
+    insensitive: true
+    elements:
+      - name: null
+        keyword: ["null"]
+      - name: boolean
+        keyword: ["true", "false"]
+        break: true
+      - name: number
+        regex: "[-+]?\\d*\\.?\\d+([eE][-+]?\\d+)?"
+      - name: string
+        regex: "'[^']*'|\"[^\"]*\""
+  - name: parenthesis
+    elements:
+      - name: open
+        keyword: ["("]
+      - name: close
+        keyword: [")"]
+  - name: reference
+    keyword: ["."]
+  - name: operator
+    insensitive: true
+    elements:
+      - name: unary
+        elements:
+          - name: interval
+            keyword: ["interval"]
+            break: true
+          - name: negate
+            keyword: ["!"]
+          - name: unary
+            keyword: ["-", "~"]
+      - name: binary_arithmetic
+        elements:
+          - name: power
+            keyword: ["^"]
+          - name: multiplication
+            keyword: ["*", "/", "div", "%", "mod"]
+          - name: addition
+            keyword: ["+", "-"]
+          - name: shift
+            keyword: ["<<", ">>"]
+          - name: bit_and
+            keyword: ["&"]
+          - name: bit_or
+            keyword: ["|"]
+          - name: comparison
+            keyword: ["=", "<=>", ">=", ">", "<=", "<", "<>", "!=", "is", "like", "regexp", "in", "member of"]
+      - name: multiton
+        elements:
+          - name: between
+            keyword: ["between", "and"]
+            break: true
+          - name: case
+            keyword: ["case", "when", "then", "else", "end"]
+            break: true
+      - name: not
+        keyword: ["not"]
+        break: true
+      - name: binary_logical
+        elements:
+          - name: and
+            keyword: ["and", "&&"]
+            break: true
+          - name: xor
+            keyword: ["xor"]
+            break: true
+          - name: or
+            keyword: ["or", "||"]
+            break: true
+      - name: assignment
+        keyword: ["=", ":="]
+      - name: alias
+        keyword: ["as"]
+  - name: keyword
+    insensitive: true
+    keyword: ["*", "select", "from", "distinct", "all", "where", "group", "by", "having", "union", "except", "intersect", "order", "limit", "offset", "is", "any", "some", "or", "like", "as", "in", "left", "right", "outer", "cross", "join", "inner", "full", "anti", "using", "on", "with"]
+    break: true
+  - name: identifier
+    regex: "[a-zA-Z_][a-zA-Z0-9_]*"
+  - name: comma
+    keyword: [","]
+  - name: whitespace
+    regex: "\\s+"
+
+rule:
+  - name: elimination
+    whitespace: true
+    rules:
+      - spec: [".lex.comment"]
+        type: whitespace
+        mapping:
+          contents: 0
+      - spec: [".lex.whitespace"]
+        type: whitespace
+        mapping:
+          contents: 0
+
+  - name: expression
+    rules:
+      - spec: [".lex.identifier"]
+        type: identifier
+        mapping:
+          name: 0
+      - spec: [".lex.literal"]
+        type: literal
+        mapping:
+          literal: 0
+      - spec: [".lex.identifier", ".lex.parenthesis.open", ".rule.expressions[?]", ".lex.parenthesis.close"]
+        type: application
+        mapping:
+          func: 0
+          arguments: 1
+      - spec: [".lex.parenthesis.open", ".rule.expression", ".lex.parenthesis.close"]
+        mapping: 1
+      - spec: [".rule.expression", ".lex.reference", ".lex.identifier"]
+        type: reference
+        mapping:
+          object: 0
+          field: 2
+      - spec: [".lex.operator.unary", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 0
+          arguments: [1]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.power", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.multiplication", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.addition", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.shift", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.bit_and", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.bit_or", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_arithmetic.comparison", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.multiton.between.between", ".rule.expression", ".lex.operator.multiton.between.and", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2, 4]
+      - spec: [".lex.operator.multiton.case.case", ".rule.when[+]", ".lex.operator.multiton.case.else", ".rule.expression", ".lex.operator.multiton.case.end"]
+        type: case
+        mapping:
+          elements: 1
+          else: 3
+      - spec: [".lex.operator.not", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 0
+          arguments: [1]
+      - spec: [".rule.expression", ".lex.operator.binary_logical.and", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_logical.xor", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.binary_logical.or", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.assignment", ".rule.expression"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+      - spec: [".rule.expression", ".lex.operator.alias", ".lex.identifier"]
+        type: operation
+        mapping:
+          operator: 1
+          arguments: [0, 2]
+
+  - name: when
+    rules:
+      - spec: [".lex.operator.multiton.case.when", ".rule.expression", ".lex.operator.multiton.case.then", ".rule.expression"]
+        type: when
+        mapping:
+          predicate: 1
+          value: 3
+
+  - name: table_expression
+    rules:
+      - spec: [".lex.identifier"]
+        type: identifier
+        mapping:
+          name: 0
+      - spec: [".rule.table_expression", ".lex.reference", ".lex.identifier"]
+        type: reference
+        mapping:
+          object: 0
+          field: 2
+      - spec: [".rule.table_expression", ".lex.keyword.cross", ".rule.table_expression"]
+        type: join
+        mapping:
+          left: 0
+          right: 2
+          type: "`cross`"
+      - spec: [".rule.join_pre", ".rule.join_predicate"]
+        type: join
+        mapping:
+          left: 0.left
+          right: 0.right
+          type: 0.type
+          predicate: 1
+      - spec: [".rule.table_expression", ".lex.operator.alias", ".lex.identifier"]
+        type: alias
+        mapping:
+          value: 0
+          name: 2
+      - spec: [".lex.parenthesis.open", ".rule.select", ".lex.parenthesis.close"]
+        mapping: 1
+
+  - name: join_pre
+    rules:
+      - spec: [".rule.table_expression", ".lex.keyword.inner[?]", ".lex.keyword.join", ".rule.table_expression"]
+        type: join_pre
+        mapping:
+          left: 0
+          right: 3
+          type: "`inner`"
+      - spec: [".rule.table_expression", ".lex.keyword.left", ".lex.keyword.outer[?]", ".lex.keyword.join", ".rule.table_expression"]
+        type: join_pre
+        mapping:
+          left: 0
+          right: 4
+          type: "`left`"
+      - spec: [".rule.table_expression", ".lex.keyword.left", ".lex.keyword.anti", ".lex.keyword.join", ".rule.table_expression"]
+        type: join_pre
+        mapping:
+          left: 0
+          right: 4
+          type: "`left_anti`"
+      - spec: [".rule.table_expression", ".lex.keyword.right", ".lex.keyword.outer[?]", ".lex.keyword.join", ".rule.table_expression"]
+        type: join_pre
+        mapping:
+          left: 0
+          right: 4
+          type: "`right`"
+      - spec: [".rule.table_expression", ".lex.keyword.right", ".lex.keyword.anti", ".lex.keyword.join", ".rule.table_expression"]
+        type: join_pre
+        mapping:
+          left: 0
+          right: 4
+          type: "`right_anti`"
+      - spec: [".rule.table_expression", ".lex.keyword.full", ".lex.keyword.outer[?]", ".lex.keyword.join", ".rule.table_expression"]
+        type: join_pre
+        mapping:
+          left: 0
+          right: 4
+          type: "`full`"
+
+  - name: join_predicate
+    rules:
+      - spec: [".lex.keyword.using", ".rule.expressions"]
+        type: join_predicate
+        mapping:
+          type: "`using`"
+          columns: 1
+      - spec: [".lex.keyword.on", ".rule.expression"]
+        mapping:
+          type: "`on`"
+          predicate: 1
+
+  - name: expressions
+    rules:
+      - spec: [".rule.expression"]
+        mapping: [0]
+      - spec: [".rule.expressions", ".lex.comma", ".rule.expression"]
+        mapping: 0 + [2]
+
+  - name: table_expressions
+    rules:
+      - spec: [".rule.table_expression"]
+        mapping: [0]
+      - spec: [".rule.table_expressions", ".lex.comma", ".rule.table_expression"]
+        mapping: 0 + [2]
+
+  - name: where
+    rules:
+      - spec: [".lex.keyword.where", ".rule.expression"]
+        mapping: 1
+
+  - name: from
+    rules:
+      - spec: [".lex.keyword.from", ".rule.table_expression", ".rule.where[?]"]
+        type: from
+        mapping:
+          table: 1
+          where: 2
+
+  - name: having
+    rules:
+      - spec: [".lex.keyword.having", ".rule.expression"]
+        mapping: 1
+
+  - name: groupby
+    rules:
+      - spec: [".lex.keyword.group", ".lex.keyword.by", ".rule.expressions", ".rule.having[?]"]
+        type: groupby
+        mapping:
+          columns: 2
+          having: 3
+
+  - name: select
+    rules:
+      - spec: [".lex.keyword.select", ".rule.expressions", ".rule.from[?]", ".rule.groupby[?]"]
+        type: select
+        mapping:
+          columns: 1
+          from: 2.from
+          where: 2.where
+          groupby: 3.groupby
+          having: 3.where
+
+  - name: with_alias
+    rules:
+      - spec: [".lex.identifier", ".lex.operator.alias", ".rule.table_expression"]
+        type: with_alias
+        mapping:
+          name: 0
+          value: 2
+
+  - name: with_aliases
+    rules:
+      - spec: [".rule.with_alias"]
+        mapping: [0]
+      - spec: [".rule.with_aliases", ".lex.comma", ".rule.with_alias"]
+        mapping: 0 + [2]
+
+  - name: with
+    rules:
+      - spec: [".rule.select"]
+        mapping: 0
+      - spec: [".lex.keyword.with", ".rule.with_aliases", ".rule.with"]
+        type: with
+        mapping:
+          bindings: 1
+          body: 2
